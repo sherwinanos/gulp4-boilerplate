@@ -5,6 +5,7 @@ const { src, dest, watch, series, parallel } = require('gulp');
 const autoprefixer  = require('autoprefixer');
 const cssnano       = require('cssnano');
 const concat        = require('gulp-concat');
+const del           = require('del');
 const imagemin      = require('gulp-imagemin');
 const postcss       = require('gulp-postcss');
 const replace       = require('gulp-replace');
@@ -14,19 +15,19 @@ const uglify        = require('gulp-uglify');
 
 // File path variables
 const files = {
-  htmlPath: 'app/*.html',
   scssPath: 'app/scss/**/*.scss',
   jsPath: 'app/js/**/*.js',
-  imgPath: 'app/images/**/*'
+  imgPath: 'app/images/**/*',
+  fontPath: 'app/fonts/**/*'
 }
 
 // Sass task
 function scssTask() {
   return src(files.scssPath)
-    .pipe(sourcemaps.init())
-    .pipe(sass())
-    .pipe(postcss([ autoprefixer(), cssnano() ]))
-    .pipe(sourcemaps.write('.'))
+    .pipe(sourcemaps.init()) // initialize sourcemaps first
+    .pipe(sass()) // compile SCSS to CSS
+    .pipe(postcss([ autoprefixer(), cssnano() ])) // PostCSS plugins
+    .pipe(sourcemaps.write('.')) // write sourcemaps file in current directory
     .pipe(dest('dist/css')
   );
 }
@@ -34,7 +35,7 @@ function scssTask() {
 // JS task
 function jsTask() {
   return src(files.jsPath)
-    .pipe(concat('all.js'))
+    .pipe(concat('main.js'))
     .pipe(uglify())
     .pipe(dest('dist/js'))
 }
@@ -46,30 +47,36 @@ function imgTask() {
     .pipe(dest('dist/images/'))
 }
 
-// HTML task
-function htmlTask() {
-  return src(files.htmlPath)
-    .pipe(dest('dist/'))
+// Fonts task
+function fontTask() {
+  return src(files.fontPath)
+    .pipe(dest('dist/fonts/'))
 }
 
 // Cachebusting task
-const cbString = new Date().getTime();
-function cacheBustingTask() {
+var cbString = new Date().getTime();
+function cacheBustingTask(){
   return src(['index.html'])
     .pipe(replace(/cb=\d+/g, 'cb=' + cbString))
-    .pipe(dest('.'))
+    .pipe(dest('.'));
+}
+
+function cleanTask() {
+  return del(['dist']);
 }
 
 // Watch task
 function watchTask() {
-  watch([files.scssPath, files.jsPath, files.imgPath, files.htmlPath],
-    parallel(scssTask, jsTask, imgTask, htmlTask, reloadTask)
+  watch([files.scssPath, files.jsPath, files.imgPath, files.fontPath],
+    parallel(scssTask, jsTask, imgTask, fontTask)
   );
 }
 
+
 // Default task
 exports.default = series(
-  parallel(scssTask, jsTask, imgTask, htmlTask),
+  cleanTask,
+  parallel(scssTask, jsTask, imgTask, fontTask),
   cacheBustingTask,
   watchTask
 );
