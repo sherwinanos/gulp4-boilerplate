@@ -1,82 +1,145 @@
-"use strict";
+// REQUIRE
+//===================================
+const { src, dest, watch, series, parallel } = require("gulp");
+const sass = require("gulp-sass");
+const browserSync = require("browser-sync").create();
+const concat = require("gulp-concat");
+const uglify = require("gulp-uglify");
+const cssnano = require("gulp-cssnano");
+const imagemin = require("gulp-imagemin");
+const fileinclude = require("gulp-file-include");
+const del = require("del");
 
-// Initialize modules
-const { src, dest, watch, series, parallel } = require('gulp');
-const autoprefixer  = require('autoprefixer');
-const cssnano       = require('cssnano');
-const concat        = require('gulp-concat');
-const del           = require('del');
-const imagemin      = require('gulp-imagemin');
-const postcss       = require('gulp-postcss');
-const replace       = require('gulp-replace');
-const sass          = require('gulp-sass');
-const sourcemaps    = require('gulp-sourcemaps');
-const uglify        = require('gulp-uglify');
-
-// File path variables
+// PATHS
+//===================================
 const files = {
-  scssPath: 'app/scss/**/*.scss',
-  jsPath: 'app/js/**/*.js',
-  imgPath: 'app/images/**/*',
-  fontPath: 'app/fonts/**/*'
-}
+  indexPath: "./*.html",
+  viewsPath: "./src/views/*.html",
+  cssPath: "./src/scss/**/*.scss",
+  jsPath: "./src/js/main.js",
+  imagesPath: "./src/images/**/*",
+  fontsPath: "./src/fonts/**/*"
+};
 
-// Sass task
-function scssTask() {
-  return src(files.scssPath)
-    .pipe(sourcemaps.init()) // initialize sourcemaps first
-    .pipe(sass()) // compile SCSS to CSS
-    .pipe(postcss([ autoprefixer(), cssnano() ])) // PostCSS plugins
-    .pipe(sourcemaps.write('.')) // write sourcemaps file in current directory
-    .pipe(dest('dist/css')
-  );
-}
+// Path: CSS Libraries
+const libPath = ["./src/css/lib/bootstrap.min.css"];
 
-// JS task
-function jsTask() {
-  return src(files.jsPath)
-    .pipe(concat('main.js'))
-    .pipe(uglify())
-    .pipe(dest('dist/js'))
-}
+// Path: JS Vendor
+const vendorPath = [
+  "./src/js/vendor/jquery.min.js",
+  "./src/js/vendor/bootstrap.min.js"
+];
 
-// Image task
-function imgTask() {
-  return src(files.imgPath)
-    .pipe(imagemin())
-    .pipe(dest('dist/images/'))
-}
-
-// Fonts task
-function fontTask() {
-  return src(files.fontPath)
-    .pipe(dest('dist/fonts/'))
-}
-
-// Cachebusting task
-var cbString = new Date().getTime();
-function cacheBustingTask(){
-  return src(['index.html'])
-    .pipe(replace(/cb=\d+/g, 'cb=' + cbString))
-    .pipe(dest('.'));
-}
+// TASKS
+//===================================
 
 function cleanTask() {
-  return del(['dist']);
+  return del(["./dist/**", "!./dist"]);
 }
 
-// Watch task
+function indexTask() {
+  return src(files.indexPath)
+    .pipe(
+      fileinclude({
+        prefix: "@@",
+        basepath: "@file"
+      })
+    )
+    .pipe(dest("./dist"))
+    .pipe(browserSync.stream());
+}
+
+// Task: CSS (libraries)
+function imageTask() {
+  return src(files.imagesPath)
+    .pipe(imagemin())
+    .pipe(dest("./dist/images"));
+}
+
+// Task: CSS
+function styleTask() {
+  return src(files.cssPath)
+    .pipe(sass())
+    .pipe(cssnano())
+    .pipe(concat("styles.min.css"))
+    .pipe(dest("./dist/css"))
+    .pipe(browserSync.stream());
+}
+
+// Task: JS
+function scriptTask() {
+  return src(files.jsPath)
+    .pipe(concat("main.min.js"))
+    .pipe(uglify())
+    .pipe(dest("./dist/js"))
+    .pipe(browserSync.stream());
+}
+
+// Task: JS (vendor)
+function vendorTask() {
+  return src(vendorPath)
+    .pipe(concat("vendor.min.js"))
+    .pipe(uglify())
+    .pipe(dest("./dist/js"))
+    .pipe(browserSync.stream());
+}
+
+// Task: CSS (libraries)
+function libTask() {
+  return src(libPath)
+    .pipe(cssnano())
+    .pipe(concat("lib.min.css"))
+    .pipe(dest("./dist/css"))
+    .pipe(browserSync.stream());
+}
+
+// Task: Fonts
+function fontsTask() {
+  return src(files.fontsPath).pipe(dest("./dist/fonts"));
+}
+
+// Task: Watch
 function watchTask() {
-  watch([files.scssPath, files.jsPath, files.imgPath, files.fontPath],
-    parallel(scssTask, jsTask, imgTask, fontTask)
+  browserSync.init({
+    server: {
+      baseDir: "./dist"
+    }
+  });
+  //watch(files.indexPath).on("change", browserSync.reload);
+  //watch(files.viewsPath).on("change", browserSync.reload);
+  watch(vendorPath);
+  watch(libPath);
+  watch(
+    [
+      files.indexPath,
+      files.cssPath,
+      files.jsPath,
+      files.imagesPath,
+      files.fontsPath
+    ],
+    parallel(
+      indexTask,
+      styleTask,
+      scriptTask,
+      imageTask,
+      vendorTask,
+      libTask,
+      fontsTask
+    )
   );
 }
 
-
-// Default task
+// Exports
 exports.default = series(
   cleanTask,
-  parallel(scssTask, jsTask, imgTask, fontTask),
-  cacheBustingTask,
+  parallel(
+    indexTask,
+    styleTask,
+    scriptTask,
+    imageTask,
+    vendorTask,
+    libTask,
+    fontsTask
+  ),
   watchTask
 );
